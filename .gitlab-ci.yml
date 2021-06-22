@@ -1,0 +1,56 @@
+#variables:
+  # - 
+
+# before_script:
+#   - 
+
+stages:
+  - build
+  - pull
+  - test
+  - push
+
+build:
+  retry: 2
+  tags:
+    - python
+  stage: build
+  script:
+    - make build
+  only:
+    refs:
+      - merge_request
+
+pull:
+  retry: 2
+  tags:
+    - python
+  stage: pull
+  script:
+    - make pull
+  only:
+    refs:
+      - master
+
+container-scan:
+  retry: 2
+  tags:
+    - python
+  stage: test
+  script:
+    - make test
+  only:
+    refs:
+      - merge_request
+      - master
+
+push:
+  retry: 2
+  tags:
+    - python
+  stage: push
+  script:
+    - make push
+  only:
+    refs:
+      - master
