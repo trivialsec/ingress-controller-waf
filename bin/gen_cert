@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -e
+source .env
+# Create Root Key
+openssl genrsa -out .${BUILD_ENV}/rootCA.pem 4096
+# Create and self sign the Root Certificate
+openssl req -x509 -new -nodes \
+    -key .${BUILD_ENV}/rootCA.pem \
+    -sha256 -days 30 \
+    -out .${BUILD_ENV}/rootCA.crt \
+    -subj "/C=AU/O=Trivial Security/OU=Trivial Security Certification Authority"
+
+if ! [ -x "$(command -v certutil)" ]; then
+  echo '[INFO] certutil is not installed' >&2
+  exit 0
+fi
+
+# Add to trust store
+certutil -d sql:$HOME/.pki/nssdb -D -n trivialsec || true
+certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n trivialsec -i .development/rootCA.crt
+# Verify trust store
+certutil -d sql:$HOME/.pki/nssdb -L -n trivialsec
+
+echo "Remove from trust store, run:"
+echo 'certutil -d sql:$HOME/.pki/nssdb -D -n trivialsec'

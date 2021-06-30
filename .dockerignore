@@ -1,0 +1,16 @@
+.vscode/
+.git/
+.venv/
+.repo/
+bin/
+plans/
+.env-example
+.gitignore
+.gitlab-ci.yml
+.in
+.out
+LICENSE.md
+Makefile
+README.md
+**.pyc
+**/__pycache__/

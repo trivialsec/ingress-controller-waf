@@ -1,0 +1,4 @@
+ws.trivialsec.com
+www.trivialsec.com
+app.trivialsec.com
+api.trivialsec.com

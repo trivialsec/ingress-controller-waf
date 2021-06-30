@@ -1,0 +1,77 @@
+version: '3.7'
+x-defaults: &defaults
+  restart: unless-stopped
+  logging:
+    options:
+      max-size: "10m"
+      max-file: "3"
+services:
+  ingress:
+    <<: *defaults
+    image: "registry.gitlab.com/trivialsec/ingress-controller/nginx:${IMAGE_TAG}"
+    container_name: ingress-controller
+    volumes:
+      - letsencrypt-datadir:/etc/letsencrypt
+      - certbot-datadir:/var/www/certbot
+    ports:
+      - "80:80"
+      - "443:443"
+    expose:
+      - 80
+      - 443
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+      - NET_BIND_SERVICE
+    networks:
+      default:
+        aliases:
+          - nginx
+          - ingress
+          - waf
+
+  certbot:
+    <<: *defaults
+    image: "registry.gitlab.com/trivialsec/ingress-controller/certbot:${IMAGE_TAG}"
+    container_name: certbot
+    build:
+      context: ./
+      dockerfile: conf/certbot/Dockerfile
+      args:
+        BUILD_ENV: ${BUILD_ENV}
+    environment:
+      CERTBOT_STAGING: 0
+    volumes:
+      - letsencrypt-datadir:/etc/letsencrypt
+      - certbot-datadir:/var/www/certbot
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    depends_on:
+      - ingress
+    networks:
+      default:
+        aliases:
+          - certbot
+          - letsencrypt
+
+volumes:
+  certbot-datadir:
+    external: true
+    name: certbot-datadir
+  letsencrypt-datadir:
+    external: true
+    name: letsencrypt-datadir
+
+networks:
+  default:
+    external:
+      name: trivialsec

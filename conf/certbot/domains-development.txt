@@ -1,0 +1,5 @@
+assets.trivialsec
+www.trivialsec
+ws.trivialsec
+app.trivialsec
+api.trivialsec

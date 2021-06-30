@@ -1,56 +1,108 @@
-#variables:
-  # - 
+variables:
+  AWS_REGION: ap-southeast-2
+  AWS_ACCOUNT: 814504268053
+  BUILD_ENV: production
 
-# before_script:
-#   - 
+before_script:
+  - touch .env
+  - make --version
+  - aws --version
+  - terraform --version
+  - docker --version
 
 stages:
   - build
-  - pull
-  - test
-  - push
+  - upload
+  - deploy
 
-build:
+tf:plan:
   retry: 2
   tags:
     - python
   stage: build
   script:
-    - make build
+    - make plan
   only:
     refs:
       - merge_request
+      - main
+  artifacts:
+    name: tfplan
+    paths:
+      - plans/.tfplan
+    reports:
+      terraform: plans/tfplan.json
 
-pull:
-  retry: 2
+build:ingress:
   tags:
-    - python
-  stage: pull
+    - linode
+  stage: build
   script:
-    - make pull
-  only:
-    refs:
-      - master
-
-container-scan:
-  retry: 2
-  tags:
-    - python
-  stage: test
-  script:
-    - make test
+    - make docker-login
+    - ./bin/gen_cert
+    - make build-ci-ingress
   only:
     refs:
       - merge_request
-      - master
+      - main
 
-push:
+build:certbot:
+  tags:
+    - linode
+  stage: build
+  script:
+    - make docker-login
+    - make build-ci-certbot
+  only:
+    refs:
+      - merge_request
+      - main
+
+tf:apply:
   retry: 2
   tags:
     - python
-  stage: push
+  stage: deploy
   script:
-    - make push
+    - make apply
   only:
     refs:
-      - master
+      - main
+  environment:
+    name: linode
+    url: https://cloud.linode.com/search/?query=label:ingress-controller
+    on_stop: tfdestroy
+  dependencies:
+    - tfplan
+  when: manual
+
+tf:destroy:
+  retry: 2
+  stage: deploy
+  variables:
+    GIT_STRATEGY: none
+  tags:
+    - python
+  script:
+    - make destroy
+  when: manual
+  environment:
+    name: linode
+    action: stop
+  artifacts:
+    name: tfdestroy
+    paths:
+      - plans/.tfdestroy
+    reports:
+      terraform: plans/tfdestroy.json
+
+push:docker:
+  tags:
+    - linode
+  stage: deploy
+  script:
+    - make docker-login
+    - make push-ci
+  only:
+    refs:
+      - main
