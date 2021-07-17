@@ -20,7 +20,7 @@ terraform {
         }
     }
     backend "s3" {
-        bucket = "static-trivialsec"
+        bucket = "tfplans-trivialsec"
         key    = "terraform/statefiles/ingress-controller"
         region  = "ap-southeast-2"
     }

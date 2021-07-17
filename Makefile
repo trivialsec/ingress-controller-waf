@@ -20,16 +20,19 @@ setup:
 	docker volume create --name=letsencrypt-datadir 2>/dev/null || true
 	docker volume create --name=certbot-datadir 2>/dev/null || true
 
-build-ci-ingress: ## Builds ingress controllerimage using docker cli directly for CI
-	docker pull registry.gitlab.com/trivialsec/containers-common/waf
-	@docker build --compress $(BUILD_ARGS) \
+build-ci-ingress: pull-ingress pull-base build-ingress ## Builds ingress controllerimage using docker cli directly for CI
+
+build-ingress: ## Builds ingress controller image
+	@docker build -q --compress $(BUILD_ARGS) \
 		-t $(NAME_INGRESS):$(CI_BUILD_REF) \
 		--cache-from $(NAME_INGRESS):latest \
         --build-arg BUILD_ENV=$(BUILD_ENV) \
 		-f conf/nginx/Dockerfile .
 
-build-ci-certbot: ## Builds ingress controllerimage using docker cli directly for CI
-	@docker build --compress $(BUILD_ARGS) \
+build-ci-certbot: pull-certbot build-certbot ## Builds certbot image
+
+build-certbot: ## Builds ingress controller image
+	@docker build -q --compress $(BUILD_ARGS) \
 		-t $(NAME_CERTBOT):$(CI_BUILD_REF) \
 		--cache-from $(NAME_CERTBOT):latest \
         --build-arg BUILD_ENV=$(BUILD_ENV) \
@@ -38,38 +41,29 @@ build-ci-certbot: ## Builds ingress controllerimage using docker cli directly fo
 build-ci: build-ci-ingress build-ci-certbot ## Builds images using docker cli directly for CI
 
 push-tagged: ## Push tagged image
-	docker push $(NAME_INGRESS):${CI_BUILD_REF}
-	docker push $(NAME_CERTBOT):${CI_BUILD_REF}
+	docker push -q $(NAME_INGRESS):${CI_BUILD_REF}
+	docker push -q $(NAME_CERTBOT):${CI_BUILD_REF}
 
 push-ci: ## Push latest image using docker cli directly for CI
 	docker tag $(NAME_INGRESS):${CI_BUILD_REF} $(NAME_INGRESS):latest
-	docker push $(NAME_INGRESS):latest
 	docker tag $(NAME_CERTBOT):${CI_BUILD_REF} $(NAME_CERTBOT):latest
-	docker push $(NAME_CERTBOT):latest
+	docker push -q $(NAME_INGRESS):latest
+	docker push -q $(NAME_CERTBOT):latest
 
-pull: ## pulls latest image
-	docker pull $(NAME_INGRESS):latest
-	docker pull $(NAME_CERTBOT):latest
+pull-base: ## pulls latest base image
+	docker pull -q registry.gitlab.com/trivialsec/containers-common/waf:latest
+
+pull-ingress: ## pulls latest ingress image
+	docker pull -q $(NAME_INGRESS):latest
+
+pull-certbot: ## pulls latest certbot image
+	docker pull -q $(NAME_CERTBOT):latest
 
 rebuild: down build-ci ## Brings down the stack and builds it anew
 
 docker-login: ## login to docker cli using $DOCKER_USER and $DOCKER_PASSWORD
 	@echo $(shell [ -z "${DOCKER_PASSWORD}" ] && echo "DOCKER_PASSWORD missing" )
 	@echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USER} --password-stdin registry.gitlab.com
-
-docker-clean: ## quick docker environment cleanup
-	docker rmi $(docker images -qaf "dangling=true")
-	yes | docker system prune
-	sudo service docker restart
-
-docker-purge: ## thorough docker environment cleanup
-	docker rmi $(docker images -qa)
-	yes | docker system prune
-	sudo service docker stop
-	sudo rm -rf /tmp/docker.backup/
-	sudo cp -Pfr /var/lib/docker /tmp/docker.backup
-	sudo rm -rf /var/lib/docker
-	sudo service docker start
 
 up: ## Starts latest container images
 	docker-compose up -d
