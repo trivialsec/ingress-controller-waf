@@ -36,7 +36,7 @@ for domain in "${domains[@]}"; do
 
 done
 
-rm /tmp/rootCA.pem /tmp/rootCA.crt
+rm /tmp/rootCA.pem
 
 trap exit TERM
 while :; do
