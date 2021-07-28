@@ -87,7 +87,7 @@ cert_dot_sh/*.csv.part
 **/*.pem
 **/*.pid
 **/.monit*
-
+**/*.crt
 **/*.whl
 *.zip
 *.tar.gz
