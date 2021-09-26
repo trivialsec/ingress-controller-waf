@@ -23,7 +23,7 @@ setup:
 build-ci-ingress: pull-ingress pull-base build-ingress ## Builds ingress controllerimage using docker cli directly for CI
 
 build-ingress: ## Builds ingress controller image
-	@docker build -q --compress $(BUILD_ARGS) \
+	@docker build --compress $(BUILD_ARGS) \
 		-t $(NAME_INGRESS):$(CI_BUILD_REF) \
 		--cache-from $(NAME_INGRESS):latest \
         --build-arg BUILD_ENV=$(BUILD_ENV) \
@@ -32,7 +32,7 @@ build-ingress: ## Builds ingress controller image
 build-ci-certbot: pull-certbot build-certbot ## Builds certbot image
 
 build-certbot: ## Builds ingress controller image
-	@docker build -q --compress $(BUILD_ARGS) \
+	@docker build --compress $(BUILD_ARGS) \
 		-t $(NAME_CERTBOT):$(CI_BUILD_REF) \
 		--cache-from $(NAME_CERTBOT):latest \
         --build-arg BUILD_ENV=$(BUILD_ENV) \

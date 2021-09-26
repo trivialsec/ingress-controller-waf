@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
+cp /tmp/options-ssl-nginx.conf /etc/letsencrypt/options-ssl-nginx.conf
+cp /tmp/ssl-dhparams.pem /etc/letsencrypt/ssl-dhparams.pem
 [ "${BUILD_ENV}" == "development" ] && exit 0
 if ! [ -f /tmp/domains.txt ]; then
   echo "/tmp/domains.txt not found, exiting..."
@@ -11,9 +13,6 @@ readonly rsa_key_size=4096
 readonly email="support@trivialsec.com"
 # Set to 1 if you're testing your setup to avoid hitting request limits
 [ -z "${CERTBOT_STAGING}" ] && CERTBOT_STAGING=1
-
-cp /tmp/options-ssl-nginx.conf /etc/letsencrypt/options-ssl-nginx.conf
-cp /tmp/ssl-dhparams.pem /etc/letsencrypt/ssl-dhparams.pem
 
 for domain in "${domains[@]}"; do
   path="/etc/letsencrypt/live/${domain}"
