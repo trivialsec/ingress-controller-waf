@@ -1,0 +1,268 @@
+#!/bin/sh
+# <UDF name="FQDN" label="The hostname for the new Linode." />
+# <UDF name="AWS_ACCESS_KEY_ID" Label="AWS API Key ID" />
+# <UDF name="AWS_SECRET_ACCESS_KEY" Label="AWS Secret Access Key" />
+# <UDF name="AWS_REGION" Label="AWS Region" />
+# <UDF name="GEO_DB_RELEASE" Label="db-ip.com release" />
+# <UDF name="OWASP_BRANCH" Label="github.com/coreruleset/coreruleset branch" />
+# <UDF name="MODSEC_BRANCH" Label="github.com/SpiderLabs/ModSecurity branch" />
+# <UDF name="NGINX_VERSION" Label="Nginx version" />
+# <UDF name="NJS_VERSION" Label="njs version" />
+# <UDF name="NGINX_SIGNING_CHECKSUM" Label="Nginx signing SHA512 checksum" />
+# <UDF name="SECHTTPBLKEY" Label="Project Honey Pot Key for HTTP Blacklist" />
+# <UDF name="DOMAINS" Label="upstream backend domains" />
+
+set -ex
+exec >/root/stackscript.log 2>&1
+echo "Linode Variable Values:  LINODE_ID: $LINODE_ID,  LINODE_LISHUSERNAME: $LINODE_LISHUSERNAME,  LINODE_RAM: $LINODE_RAM,  LINODE_DATACENTERID:$LINODE_DATACENTERID"
+source <ssinclude StackScriptID="931877">
+source <ssinclude StackScriptID="931669">
+
+function setup_aws() {
+    install_awscli
+    echo "Setup awscli..."
+    mkdir ~/.aws
+  cat > ~/.aws/config <<CONFIG
+[default]
+region = ${AWS_REGION}
+CONFIG
+  cat > ~/.aws/credentials <<CREDS
+[default]
+aws_access_key_id = ${AWS_ACCESS_KEY_ID}
+aws_secret_access_key = ${AWS_SECRET_ACCESS_KEY}
+CREDS
+    # Test AWS Credentials stored in Env vars
+    echo $(aws sts get-caller-identity)
+}
+function add_packages() {
+    virtual=${1:-deps}
+    echo "Adding packages..."
+    apk -q add --update lsof procps bash tzdata
+    update-ca-certificates --fresh
+    apk add --no-cache --virtual ${virtual} \
+        autoconf \
+        automake \
+        byacc \
+        curl-dev \
+        flex \
+        g++ \
+        gcc \
+        geoip-dev \
+        git \
+        libc-dev \
+        libmaxminddb-dev \
+        libstdc++ \
+        libtool \
+        libxml2-dev \
+        linux-headers \
+        lmdb-dev \
+        make \
+        openssl-dev \
+        pcre-dev \
+        yajl-dev \
+        zlib-dev
+}
+function configure_sites() {
+    for domain in ${DOMAINS}; do
+        cat > /etc/nginx/conf.d/${domain}.conf <<CONFIG
+server {
+    listen                  80;
+    listen                  [::]:80;
+    server_name             ${domain};
+    server_tokens           off;
+    client_max_body_size    32M;
+    underscores_in_headers  on;
+    proxy_cache             off;
+    proxy_no_cache          1;
+    proxy_cache_bypass      1;
+    access_log              on;
+    tcp_nodelay             off;
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+server {
+    listen                  443 ssl http2;
+    listen                  [::]:443 ssl http2;
+    server_name             ${domain};
+    server_tokens           off;
+    client_max_body_size    32M;
+    underscores_in_headers  on;
+    proxy_cache             off;
+    proxy_no_cache          1;
+    proxy_cache_bypass      1;
+    access_log              on;
+    tcp_nodelay             off;
+
+    ssl_certificate /etc/nginx/certs/${domain}/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/${domain}/privkey.pem;
+    include /etc/nginx/options-ssl-nginx.conf;
+    ssl_dhparam /etc/nginx/ssl-dhparams.pem;
+    location / {
+        proxy_ignore_headers    Cache-Control;
+        proxy_pass              http://prd-${domain}:8888;
+        proxy_set_header        Host             \$host;
+        proxy_set_header        X-Real-IP        \$remote_addr;
+        proxy_set_header        X-Forwarded-For  \$proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Proto https;
+        proxy_set_header        X-Force-Https    "yes";
+        proxy_pass_header       device_id;
+        proxy_buffering         on;
+        proxy_read_timeout      1800;
+        proxy_connect_timeout   1800;
+    }
+}
+CONFIG
+    done
+    cat > /etc/nginx/conf.d/push.trivialsec.com.conf <<CONFIG
+server {
+    listen                  443 ssl;
+    listen                  [::]:443 ssl;
+    server_name             push.trivialsec.com;
+    root                    /srv/app/;
+    server_tokens           off;
+    client_max_body_size    32M;
+    underscores_in_headers  on;
+
+    ssl_certificate /etc/nginx/certs/push.trivialsec.com/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/push.trivialsec.com/privkey.pem;
+    include /etc/nginx/options-ssl-nginx.conf;
+    ssl_dhparam /etc/nginx/ssl-dhparams.pem;
+
+    location / {
+        set \$test  \$request_method; 
+        if (\$request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' 'https://app.trivialsec.com';
+            add_header 'Access-Control-Allow-Methods' 'GET, OPTIONS';
+            add_header 'Content-Length' 0;
+            return 204;
+        }
+        if (\$request_method = 'GET') {
+            add_header 'Access-Control-Allow-Origin' 'https://app.trivialsec.com';
+            add_header 'Access-Control-Allow-Credentials' 'true';
+        }
+        if (\$request_uri = '/socket.io/') {
+             set \$test  "\${test}OK"; 
+        }
+        if (\$request_uri = '/heakthcheck') {
+             set \$test  "\${test}OK"; 
+        }
+        if (\$test != GETOK) { 
+            return 404;
+            break;
+        } 
+    }
+    location /socket.io/ {
+        proxy_cache             off;
+        proxy_no_cache          1;
+        proxy_cache_bypass      1;
+        access_log              on;
+        server_tokens           off;
+        proxy_pass              http://prd-push.trivialsec.com:8888/socket.io/;
+        proxy_http_version      1.1;
+        proxy_set_header        Upgrade \$http_upgrade;
+        proxy_set_header        Connection 'Upgrade';
+        proxy_set_header        Host             \$host;
+        proxy_set_header        X-Real-IP        \$remote_addr;
+        proxy_set_header        X-Forwarded-For  \$proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Proto https;
+        proxy_pass_header       device_id;
+    }
+}
+CONFIG
+    nginx -t || (
+        echo "bad nginx config"
+        exit 1
+    )
+    rc-service nginx reload
+    rc-update add nginx default
+}
+function run_certbot() {
+    local rsa_key_size=${1:-4096}
+    echo "Certbot..."
+    mkdir -p /etc/nginx/certs
+    for domain in ${DOMAINS}; do
+        echo "Generating rsa:${rsa_key_size} x509 certificate for ${domain}"
+        openssl genrsa -out /etc/nginx/certs/${domain}/privkey.pem ${rsa_key_size}
+        echo "Create the signing (csr)"
+        openssl req -new -sha512 \
+            -key ${domain}/privkey.pem \
+            -subj "/C=AU/O=Trivial Security Pty Ltd/OU=Trivial Security/CN=${domain}" \
+            -addext "subjectAltName = DNS:prd-${domain}" \
+            -out /etc/nginx/certs/${domain}.csr
+        # Verify the csr's content
+        openssl req -in /etc/nginx/certs/${domain}.csr -noout -text
+        certbot certonly --agree-tos --noninteractive \
+            -d ${domain} \
+            --dns-route53 \
+            --no-eff-email \
+            --email "support@trivialsec.com" \
+            --csr /etc/nginx/certs/${domain}.csr \
+            --fullchain-path /etc/nginx/certs/${domain}/fullchain.pem \
+            --chain-path /etc/nginx/certs/${domain}/chain.pem \
+            --cert-path /etc/nginx/certs/${domain}/leaf.pem \
+            --key-path /etc/nginx/certs/${domain}/privkey.pem \
+            --rsa-key-size ${rsa_key_size}
+        cat > /etc/periodic/monthly/renew-${domain} <<CONFIG
+#!/bin/sh
+openssl genrsa -out /etc/nginx/certs/${domain}/privkey.pem ${rsa_key_size}
+openssl req -new -sha512 \
+    -key ${domain}/privkey.pem \
+    -subj "/C=AU/O=Trivial Security Pty Ltd/OU=Trivial Security/CN=${domain}" \
+    -addext "subjectAltName = DNS:prd-${domain}" \
+    -out /etc/nginx/certs/${domain}.csr
+certbot certonly --agree-tos --noninteractive \
+    -d ${domain} \
+    --dns-route53 \
+    --no-eff-email \
+    --email "support@trivialsec.com" \
+    --csr /etc/nginx/certs/${domain}.csr \
+    --fullchain-path /etc/nginx/certs/${domain}/fullchain.pem \
+    --chain-path /etc/nginx/certs/${domain}/chain.pem \
+    --cert-path /etc/nginx/certs/${domain}/leaf.pem \
+    --key-path /etc/nginx/certs/${domain}/privkey.pem \
+    --rsa-key-size ${rsa_key_size}
+CONFIG
+    done
+}
+function install() {
+    setup_hostname ${FQDN}
+    harden_ssh
+    cat << EOT > /etc/ssh/banner
+ _____      _       _       _ __
+/__   \_ __(_)_   _(_) __ _| / _\ ___  ___
+  / /\/ '__| \ \ / / |/ _\` | \ \ / _ \/ __|
+ / /  | |  | |\ V /| | (_| | |\ \  __/ (__
+ \/   |_|  |_| \_/ |_|\__,_|_\__/\___|\___|
+EOT
+    export PATH="$PATH:/root/.local/bin"
+    echo 'export PATH="$PATH:/root/.local/bin"' >> ~/.profile
+    echo -e "/sbin/ifconfig eth0 | awk '/inet / { print \$2 }' | sed 's/addr://'\necho\nw\necho\niostat\necho\nmpstat\necho\ndf\necho\nfree\necho\nnetstat -tulpn" >> ~/.profile
+    setup_swap ${LINODE_RAM}
+    setup_timezone UTC
+    patch_os
+    enable_auto_updates
+    add_packages general-dependencies
+    enable_fail2ban
+    setup_aws
+    install_nginx
+    install_modsec
+    configure_modsec
+    configure_rules
+    configure_nginx
+    configure_sites
+    apk del general-dependencies
+    run_certbot
+    setup_firewall $(network_interface) 22 80 443
+    echo "Stackscript finished"
+
+}
+
+install
+rc-status
+stackscript_cleanup
+echo $(date +'%F') > /root/.deployed
+echo "Installation complete!"

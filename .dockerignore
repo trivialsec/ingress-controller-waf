@@ -15,3 +15,9 @@ README.md
 **.pyc
 **/__pycache__/
 .lh/
+waf/
+docker-compose.yaml
+LICENSE.md
+Makefile
+.gitignore
+.gitlab-ci.yml

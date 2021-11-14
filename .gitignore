@@ -85,7 +85,8 @@ tf*.json
 cert_dot_sh/*.csv
 cert_dot_sh/*.csv.part
 **/.*history
-**/*.pem
+**/certs/
+**/cacert/
 **/*.pid
 **/.monit*
 **/*.crt

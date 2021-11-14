@@ -8,14 +8,12 @@
 
 1. Consider using zsh with dotenv plugin, otherwise you need to run `source .in` every time you want to use this project. So ensure the `.in` script runs before continuing
 2. `make gencerts`; this will create a root certificate in `.development` directory if `BUILD_ENV` was set to "development" in step 1
-3. `make build-ingress`; ads teh root CA certificate to the docker environment and prepares nginx
-4. `make up`; for "development" the certbot container will just exit, the ingress container should first generate TLS certificates for each service (defined in `conf/certbot/domains-development.txt`) then direct requests to the correct container.
+3. `make build`; ads teh root CA certificate to the docker environment and prepares nginx
+4. `make up`; for "development" the certbot container will just exit, the ingress container should first generate TLS certificates for each service (defined in `domains.txt`) then direct requests to the correct container.
 
 # Troubleshoot
 
 Logs: `docker-compose logs -f`
-
-
 
 ## Unable to load CA Private Key
 
@@ -23,17 +21,7 @@ Error message: **Can't open /tmp/rootCA.pem for reading, No such file or directo
 
 This occurs when the ingress container entrypoint script cannot access the root CA certificate that was created using `make gencerts` because it will actually delete it's own copy of the root CA cert on purpose before nginx starts serving requests.
 
-To solve this error, simply run `make build-ingress` and then `make up` again
-
-## File not found /etc/letsencrypt/ssl-dhparams.pem
-
-This occurs when your docker volume "letsencrypt-datadir" has been deleted. This volume is shared between both certbot and ingress containers and container this file (along with any Let's encrypt certificates issued).
-
-To solve this problem all you need to do is to build and then run certbot before running ingress again. i.e. `make build-certbot` and then `make up` again
-
-## File not found /etc/letsencrypt/options-ssl-nginx.conf
-
-Same as "ssl-dhparams.pem" above, with the same solution
+To solve this error, simply run `make build` and then `make up` again
 
 ## nginx host not found in upstream
 

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -ex
+
+trap exit TERM
+while :; do
+  sleep 10m &
+  wait $!
+  nginx -s reload
+done &
+
+exec $@

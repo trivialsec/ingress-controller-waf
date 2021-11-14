@@ -11,9 +11,6 @@ services:
     image: "registry.gitlab.com/trivialsec/ingress-controller/nginx:${IMAGE_TAG}"
     container_name: ingress-controller
     restart: unless-stopped
-    volumes:
-      - letsencrypt-datadir:/etc/letsencrypt
-      - certbot-datadir:/var/www/certbot
     ports:
       - "80:80"
       - "443:443"
@@ -37,53 +34,13 @@ services:
     deploy:
       restart_policy:
         condition: on-failure
-        delay: 0s
         max_attempts: 10
-        window: 3s
       resources:
         limits:
           cpus: '1.00'
           memory: 1GB
         reservations:
-          cpus: '0.50'
           memory: 500M
-
-  certbot:
-    <<: *defaults
-    image: "registry.gitlab.com/trivialsec/ingress-controller/certbot:${IMAGE_TAG}"
-    container_name: certbot
-    build:
-      context: ./
-      dockerfile: conf/certbot/Dockerfile
-      args:
-        BUILD_ENV: ${BUILD_ENV}
-    environment:
-      CERTBOT_STAGING: 0
-    volumes:
-      - letsencrypt-datadir:/etc/letsencrypt
-      - certbot-datadir:/var/www/certbot
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETGID
-      - SETUID
-      - DAC_OVERRIDE
-    depends_on:
-      - ingress
-    networks:
-      default:
-        aliases:
-          - certbot
-          - letsencrypt
-
-volumes:
-  certbot-datadir:
-    external: true
-    name: certbot-datadir
-  letsencrypt-datadir:
-    external: true
-    name: letsencrypt-datadir
 
 networks:
   default:
