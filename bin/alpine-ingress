@@ -35,11 +35,13 @@ CREDS
     echo $(aws sts get-caller-identity)
 }
 function add_packages() {
-    virtual=${1:-deps}
     echo "Adding packages..."
-    apk -q add --update lsof procps bash tzdata
-    update-ca-certificates --fresh
-    apk add --no-cache --virtual ${virtual} \
+    apk -q add --update \
+        lsof \
+        procps \
+        bash \
+        tzdata \
+        lmdb-dev \
         autoconf \
         automake \
         byacc \
@@ -55,12 +57,14 @@ function add_packages() {
         libtool \
         libxml2-dev \
         linux-headers \
-        lmdb-dev \
         make \
         openssl-dev \
         pcre-dev \
         yajl-dev \
-        zlib-dev
+        zlib-dev \
+        libffi-dev \
+        python3-dev
+    update-ca-certificates --fresh
 }
 function configure_sites() {
     for domain in ${DOMAINS}; do
@@ -85,8 +89,7 @@ server {
     }
 }
 server {
-    listen                  443 ssl http2;
-    listen                  [::]:443 ssl http2;
+    listen                  443 ssl;
     server_name             ${domain};
     server_tokens           off;
     client_max_body_size    32M;
@@ -117,6 +120,7 @@ server {
 }
 CONFIG
     done
+    # just overwrite push with it's own, no need to skip in the loop
     cat > /etc/nginx/conf.d/push.trivialsec.com.conf <<CONFIG
 server {
     listen                  443 ssl;
@@ -173,57 +177,54 @@ server {
     }
 }
 CONFIG
-    nginx -t || (
-        echo "bad nginx config"
-        exit 1
-    )
-    rc-service nginx reload
-    rc-update add nginx default
 }
 function run_certbot() {
     local rsa_key_size=${1:-4096}
+    local base_path=/etc/nginx/certs
     echo "Certbot..."
-    mkdir -p /etc/nginx/certs
+    pipx install certbot
+    pipx inject certbot certbot-route53
     for domain in ${DOMAINS}; do
+        mkdir -p ${base_path}/${domain}
         echo "Generating rsa:${rsa_key_size} x509 certificate for ${domain}"
-        openssl genrsa -out /etc/nginx/certs/${domain}/privkey.pem ${rsa_key_size}
+        openssl genrsa -out ${base_path}/${domain}/privkey.pem ${rsa_key_size}
         echo "Create the signing (csr)"
         openssl req -new -sha512 \
-            -key ${domain}/privkey.pem \
+            -key ${base_path}/${domain}/privkey.pem \
             -subj "/C=AU/O=Trivial Security Pty Ltd/OU=Trivial Security/CN=${domain}" \
             -addext "subjectAltName = DNS:prd-${domain}" \
-            -out /etc/nginx/certs/${domain}.csr
+            -out ${base_path}/${domain}.csr
         # Verify the csr's content
-        openssl req -in /etc/nginx/certs/${domain}.csr -noout -text
+        openssl req -in ${base_path}/${domain}.csr -noout -text
         certbot certonly --agree-tos --noninteractive \
             -d ${domain} \
             --dns-route53 \
             --no-eff-email \
             --email "support@trivialsec.com" \
-            --csr /etc/nginx/certs/${domain}.csr \
-            --fullchain-path /etc/nginx/certs/${domain}/fullchain.pem \
-            --chain-path /etc/nginx/certs/${domain}/chain.pem \
-            --cert-path /etc/nginx/certs/${domain}/leaf.pem \
-            --key-path /etc/nginx/certs/${domain}/privkey.pem \
+            --csr ${base_path}/${domain}.csr \
+            --fullchain-path ${base_path}/${domain}/fullchain.pem \
+            --chain-path ${base_path}/${domain}/chain.pem \
+            --cert-path ${base_path}/${domain}/leaf.pem \
+            --key-path ${base_path}/${domain}/privkey.pem \
             --rsa-key-size ${rsa_key_size}
         cat > /etc/periodic/monthly/renew-${domain} <<CONFIG
 #!/bin/sh
-openssl genrsa -out /etc/nginx/certs/${domain}/privkey.pem ${rsa_key_size}
+openssl genrsa -out ${base_path}/${domain}/privkey.pem ${rsa_key_size}
 openssl req -new -sha512 \
-    -key ${domain}/privkey.pem \
+    -key ${base_path}/${domain}/privkey.pem \
     -subj "/C=AU/O=Trivial Security Pty Ltd/OU=Trivial Security/CN=${domain}" \
     -addext "subjectAltName = DNS:prd-${domain}" \
-    -out /etc/nginx/certs/${domain}.csr
+    -out ${base_path}/${domain}.csr
 certbot certonly --agree-tos --noninteractive \
     -d ${domain} \
     --dns-route53 \
     --no-eff-email \
     --email "support@trivialsec.com" \
-    --csr /etc/nginx/certs/${domain}.csr \
-    --fullchain-path /etc/nginx/certs/${domain}/fullchain.pem \
-    --chain-path /etc/nginx/certs/${domain}/chain.pem \
-    --cert-path /etc/nginx/certs/${domain}/leaf.pem \
-    --key-path /etc/nginx/certs/${domain}/privkey.pem \
+    --csr ${base_path}/${domain}.csr \
+    --fullchain-path ${base_path}/${domain}/fullchain.pem \
+    --chain-path ${base_path}/${domain}/chain.pem \
+    --cert-path ${base_path}/${domain}/leaf.pem \
+    --key-path ${base_path}/${domain}/privkey.pem \
     --rsa-key-size ${rsa_key_size}
 CONFIG
     done
@@ -245,7 +246,7 @@ EOT
     setup_timezone UTC
     patch_os
     enable_auto_updates
-    add_packages general-dependencies
+    add_packages
     enable_fail2ban
     setup_aws
     install_nginx
@@ -254,8 +255,14 @@ EOT
     configure_rules
     configure_nginx
     configure_sites
-    apk del general-dependencies
     run_certbot
+    nginx -t || (
+        echo "bad nginx config"
+        exit 1
+    )
+    rc-service nginx start
+    rc-update add nginx default
+
     setup_firewall $(network_interface) 22 80 443
     echo "Stackscript finished"
 

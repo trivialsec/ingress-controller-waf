@@ -6,7 +6,7 @@ resource "linode_stackscript" "ingress" {
   description = "Installs Nginx with Mod Security"
   script = data.local_file.alpine_ingress.content
   images = [local.linode_default_image]
-  rev_note = "v6"
+  rev_note = "v8"
 }
 output "ingress_stackscript_id" {
   value = linode_stackscript.ingress.id
