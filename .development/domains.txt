@@ -1,5 +1,5 @@
 assets.trivialsec
 www.trivialsec
-ws.trivialsec
+push.trivialsec
 app.trivialsec
 api.trivialsec
