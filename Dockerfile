@@ -12,11 +12,7 @@ COPY .${BUILD_ENV}/modsec/ /etc/nginx/modsec/
 COPY .${BUILD_ENV}/owasp/ /usr/local/owasp-modsecurity-crs/
 COPY .${BUILD_ENV}/nginx.conf /etc/nginx/nginx.conf
 COPY .${BUILD_ENV}/errors /usr/share/nginx/errors
-COPY .${BUILD_ENV}/conf.d/api.conf /etc/nginx/conf.d/api.conf
-COPY .${BUILD_ENV}/conf.d/appserver.conf /etc/nginx/conf.d/appserver.conf
-COPY .${BUILD_ENV}/conf.d/assets.conf /etc/nginx/conf.d/assets.conf
-COPY .${BUILD_ENV}/conf.d/push.conf /etc/nginx/conf.d/push.conf
-COPY .${BUILD_ENV}/conf.d/website.conf /etc/nginx/conf.d/website.conf
+COPY .${BUILD_ENV}/conf.d /etc/nginx/conf.d
 COPY .${BUILD_ENV}/options-ssl-nginx.conf /etc/nginx/options-ssl-nginx.conf
 COPY .${BUILD_ENV}/ssl-dhparams.pem /etc/nginx/ssl-dhparams.pem
 COPY .${BUILD_ENV}/certs /etc/nginx/certs

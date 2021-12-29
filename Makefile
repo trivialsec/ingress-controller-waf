@@ -18,11 +18,14 @@ init: ## Runs tf init tf
 	cd plans
 	terraform init -reconfigure -upgrade=true
 
+output:
+	cd plans
+	terraform output projecthoneypot_key
+
 deploy: plan apply attach-firewall ## tf plan and apply -auto-approve -refresh=true
 
 plan: init ## Runs tf validate and tf plan
 	cd plans
-	terraform init -reconfigure -upgrade=true
 	terraform validate
 	terraform plan -no-color -out=.tfplan
 	terraform show --json .tfplan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > tfplan.json
@@ -57,14 +60,15 @@ tfinstall:
 	sudo apt-get install -y terraform
 	terraform -install-autocomplete || true
 
-docker-login: ## login to docker cli using $DOCKER_USER and $DOCKER_PASSWORD
-	@echo $(shell [ -z "${DOCKER_PASSWORD}" ] && echo "DOCKER_PASSWORD missing" )
-	@echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USER} --password-stdin registry.gitlab.com
+docker-login: ## login to docker cli using $GITLAB_USER and $GITLAB_PAT
+	@echo $(shell [ -z "${GITLAB_PAT}" ] && echo "GITLAB_PAT missing" )
+	@echo ${GITLAB_PAT} | docker login -u ${GITLAB_USER} --password-stdin registry.gitlab.com
 
 certs: ## shows trusted cert alias installed
 	certutil -d sql:${HOME}/.pki/nssdb -L -n trivialsec
 
 gencerts: ## regenerates rootCA and builds the ingress controller cert bundles
+	mkdir -p .${BUILD_ENV}/cacert
 	./bin/gen_cert
 
 gen-dhparams: ## regenerates dhparam.pem

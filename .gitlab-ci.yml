@@ -1,5 +1,5 @@
 variables:
-  DOCKER_USER: ci
+  GITLAB_USER: ci
   AWS_REGION: ap-southeast-2
   AWS_ACCOUNT: 984310022655
   BUILD_ENV: production

@@ -1,2 +1,7 @@
 #!/usr/bin/env bash
+unset TF_VAR_public_key
+unset TF_VAR_allowed_linode_username
+unset TF_VAR_projecthoneypot_key
+unset BUILD_ENV
+unset IMAGE_TAG
 reset

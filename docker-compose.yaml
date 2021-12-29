@@ -17,6 +17,10 @@ services:
     expose:
       - 80
       - 443
+    volumes:
+      - .${BUILD_ENV}/nginx.conf:/etc/nginx/nginx.conf
+      - .${BUILD_ENV}/conf.d:/etc/nginx/conf.d
+      - .${BUILD_ENV}/certs:/etc/nginx/certs
     cap_drop:
       - ALL
     cap_add:

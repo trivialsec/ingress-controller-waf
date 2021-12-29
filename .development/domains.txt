@@ -3,3 +3,4 @@ www.trivialsec
 push.trivialsec
 app.trivialsec
 api.trivialsec
+batch.trivialsec

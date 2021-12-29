@@ -17,5 +17,6 @@ locals {
         "push.trivialsec.com",
         "app.trivialsec.com",
         "api.trivialsec.com",
+        "batch.trivialsec.com",
     ]
 }
