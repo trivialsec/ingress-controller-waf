@@ -3,7 +3,7 @@ SHELL := /bin/bash
 export $(shell sed 's/=.*//' .env)
 .ONESHELL: # Applies to every targets in the file!
 .PHONY: help
-NAME_INGRESS = registry.gitlab.com/trivialsec/ingress-controller/nginx
+BASE_NAME = registry.gitlab.com/trivialsec/ingress-controller
 
 help: ## This help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -88,23 +88,47 @@ docker-purge: ## thorough docker environment cleanup
 	sudo rm -rf /var/lib/docker
 	sudo service docker start
 
-build: pull ## Builds ingress controller image
+build-base: ## Builds ingress controller image
 	@docker build --compress $(BUILD_ARGS) \
-		-t $(NAME_INGRESS):$(CI_BUILD_REF) \
-		--cache-from $(NAME_INGRESS):latest \
+		-t $(BASE_NAME)/nginx:$(CI_BUILD_REF) \
+		--cache-from $(BASE_NAME)/nginx:latest \
+        --build-arg BUILD_ENV=$(BUILD_ENV) \
+		--build-arg NGINX_VERSION=$(NGINX_VERSION) \
+		--build-arg GEO_DB_RELEASE=$(GEO_DB_RELEASE) \
+		--build-arg MODSEC_BRANCH=$(MODSEC_BRANCH) \
+		--build-arg OWASP_BRANCH=$(OWASP_BRANCH) \
+		-f base/Dockerfile .
+
+buildnc: build-base ## Builds ingress controller image with --no-cache
+    @docker build --compress $(BUILD_ARGS) \
+		-t $(BASE_NAME)/waf:$(CI_BUILD_REF) \
+		--no-cache \
+        --build-arg BUILD_ENV=$(BUILD_ENV) \
+		-f Dockerfile .
+
+build: pull-base ## Builds ingress controller image
+	@docker build --compress $(BUILD_ARGS) \
+		--cache-from $(BASE_NAME)/waf:latest \
+		-t $(BASE_NAME)/waf:$(CI_BUILD_REF) \
         --build-arg BUILD_ENV=$(BUILD_ENV) \
 		-f Dockerfile .
 
 push-tagged: ## Push tagged image
-	docker push -q $(NAME_INGRESS):${CI_BUILD_REF}
-	docker push -q $(NAME_CERTBOT):${CI_BUILD_REF}
+	docker push -q $(BASE_NAME)/waf:${CI_BUILD_REF}
+
+push-base: ## Push latest image using docker cli directly for CI
+	docker tag $(BASE_NAME)/nginx:${CI_BUILD_REF} $(BASE_NAME)/nginx:latest
+	docker push -q $(BASE_NAME)/nginx:latest
 
 push: ## Push latest image using docker cli directly for CI
-	docker tag $(NAME_INGRESS):${CI_BUILD_REF} $(NAME_INGRESS):latest
-	docker push -q $(NAME_INGRESS):latest
+	docker tag $(BASE_NAME)/waf:${CI_BUILD_REF} $(BASE_NAME)/waf:latest
+	docker push -q $(BASE_NAME)/waf:latest
 
-pull: ## pulls latest base images
-	docker pull -q registry.gitlab.com/trivialsec/containers-common/waf:latest
+pull: ## pulls latest latest images
+	docker pull -q $(BASE_NAME)/waf:latest
+
+pull-base: ## pulls latest base images
+	docker pull -q $(BASE_NAME)/nginx:latest
 
 up: ## Starts latest container images
 	docker-compose up -d
